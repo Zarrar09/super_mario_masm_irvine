@@ -11,7 +11,15 @@ The images below show the design of the menu and both levels.
 The actual game runs inside the Windows console.
 
 ![Level 1](images/level1.png)
+
+
+
+
 ![Level 2](images/level2.png)
+
+
+
+
 ![Menu](images/menu.png)
 
 ---
@@ -46,10 +54,10 @@ You need these to run the game:
 
 ## Controls
 
-- Left Arrow: Move left  
-- Right Arrow: Move right  
-- Space: Jump / Double jump  
-- Esc: Quit the game  
+- W : Jump / Double jump  
+- D : Move right  
+- A: Jump / Double jump  
+- P: Pause Menu  
 
 ---
 
