@@ -1,5 +1,6 @@
 INCLUDE Irvine32.inc
 INCLUDE macros.inc
+includelib winmm.lib
 
 .data
 
@@ -36,17 +37,24 @@ enemyActive BYTE MAX_ENEMIES DUP(0)
 enemyCount BYTE 0
 enemyMoveTimer BYTE 0
 
+;BOWSER VARIABLES
+bowserIndex BYTE 0
+bowserHealth BYTE 3
+bowserChaseRange BYTE 30
+bowserMoveTimer BYTE 0
+bowserDefeatedMsg BYTE "BOWSER DEFEATED!  +2000", 0
+
 ;LIGHTNING VARIABLES
 lightningTimer DWORD 0
 lightningX BYTE 0
 lightningY BYTE 0
 lightningActive BYTE 0
 lightningDisplayTimer BYTE 0
-lightningWarning BYTE "!!   ZAP ! !", 0
+lightningWarning BYTE "!!    ZAP !  !", 0
 lightningInterval DWORD 200
 
 ;USER INPUT VARIABLE
-userInput BYTE ?    
+userInput BYTE ?     
 
 ;SCORE VARIABLES
 stringScore BYTE "SCORE: ", 0
@@ -73,8 +81,8 @@ stringCoins BYTE "COINS: ", 0
 ;PAUSE VARIABLES
 isPaused BYTE 0
 pauseTitle BYTE "============ GAME PAUSED ============", 0
-pauseOption1 BYTE "1.     RESUME", 0
-pauseOption2 BYTE "2.   EXIT", 0
+pauseOption1 BYTE "1.      RESUME", 0
+pauseOption2 BYTE "2.    EXIT", 0
 
 ;MENU VARIABLES
 menuWelcome BYTE "W E L C O M E", 0
@@ -84,7 +92,7 @@ menuOption2 BYTE "2.  INSTRUCTIONS", 0
 menuOption3 BYTE "3.  SAVE/LOAD", 0
 menuOption4 BYTE "4.  EXIT", 0
 levelPrompt BYTE "=========== SELECT LEVEL ===========", 0
-level1Option BYTE "1. Level 1", 0
+level1Option BYTE "1. sLevel 1", 0
 level2Option BYTE "2. Level 2 (Boss Fight)", 0
 level3Option BYTE "3. Back to Menu", 0
 
@@ -105,26 +113,26 @@ instructLine7 BYTE "Power-ups:", 0
 instructLine8 BYTE "C - Coin: +200 points", 0
 instructLine9 BYTE "B - Mushroom: Grow bigger!", 0
 instructLine10 BYTE "G - Gravity Boots: Higher jump!", 0
-instructLine11 BYTE "Press any key to return to menu..  .", 0
+instructLine11 BYTE "Press any key to return to menu..   .", 0
 
 ;GAME OVER VARIABLES
 gameOverText BYTE "GAME OVER", 0
 finalScoreText BYTE "FINAL SCORE: ", 0
-pressKeyText BYTE "Press any key to return to menu.. .", 0
+pressKeyText BYTE "Press any key to return to menu..  .", 0
 
 ;GAME STATE FLAG
 isGameOver BYTE 0
 
 ;LEVEL COMPLETE VARIABLES
 levelCompleteText1 BYTE "LEVEL 1 COMPLETE!", 0
-levelCompleteText2 BYTE "PRINCESS RESCUED!   YOU WIN!", 0
+levelCompleteText2 BYTE "PRINCESS RESCUED!    YOU WIN!", 0
 timeText BYTE "TIME: ", 0
 scoreText2 BYTE "SCORE: ", 0
 livesText2 BYTE "LIVES: ", 0
 
 ;SAVE FILE VARIABLES
 saveFileName BYTE "gamesave.dat", 0
-saveFileHandle DWORD ? 
+saveFileHandle DWORD ?  
 playerName BYTE 21 DUP(0)
 playerNameLength BYTE 0
 savedScore DWORD 0
@@ -151,7 +159,7 @@ currentPlayerMsg BYTE "Current Player: ", 0
 highScoreMsg BYTE "High Score: ", 0
 highScorePlayer BYTE "Player: ", 0
 pressAnyKey BYTE "Press any key to continue...", 0
-noNameMsg BYTE "No name entered.  Using default.", 0
+noNameMsg BYTE "No name entered.   Using default.", 0
 defaultName BYTE "Player", 0
 
 .code
@@ -194,6 +202,8 @@ loadLevel2 PROC
     mov lightningTimer, 0
     mov lightningActive, 0
     mov levelLoaded, 0
+    mov bowserHealth, 3
+    mov bowserMoveTimer, 0
     call scanForEnemies
     ret
 loadLevel2 ENDP
@@ -428,6 +438,8 @@ colLoop2:
     je princessFLAG2
     cmp al, 'W'
     je moon2
+    cmp al, 'V'
+    je sky2
     jmp sky2
 sky2:
     mov eax, black * 16 + black
@@ -600,7 +612,6 @@ doBootsHud:
     mov al, ' '
     call WriteChar
 noBootsDisplay:
-    ;Display player name in HUD
     cmp currentLevelNum, 2
     je nameHudLvl2
     mov eax, lightBlue * 16 + white
@@ -723,6 +734,8 @@ drawEnemyLoop:
     je drawKoopa
     cmp al, 'H'
     je drawShell
+    cmp al, 'V'
+    je drawBowser
     jmp nextEnemy
 drawGoomba:
     mov eax, brown * 16 + brown
@@ -747,6 +760,38 @@ drawShellChar:
     call SetTextColor
     mov al, 'O'
     call WriteChar
+    jmp nextEnemy
+drawBowser:
+    mov eax, red * 16 + yellow
+    call SetTextColor
+    mov al, 'B'
+    call WriteChar
+    push ecx
+    push edx
+    mov esi, OFFSET enemyX
+    movzx ecx, bowserIndex
+    add esi, ecx
+    mov dl, BYTE PTR [esi]
+    mov esi, OFFSET enemyY
+    add esi, ecx
+    mov dh, BYTE PTR [esi]
+    dec dh
+    cmp dh, 1
+    jl skipBowserHealthDraw
+    call Gotoxy
+    mov eax, black * 16 + red
+    call SetTextColor
+    mov al, 'H'
+    call WriteChar
+    mov al, 'P'
+    call WriteChar
+    mov al, ':'
+    call WriteChar
+    movzx eax, bowserHealth
+    call WriteDec
+skipBowserHealthDraw:
+    pop edx
+    pop ecx
     jmp nextEnemy
 nextEnemy:
     inc ecx
@@ -785,6 +830,26 @@ clearEnemyLoop:
     call Gotoxy
     mov al, ' '
     call WriteChar
+    mov esi, OFFSET enemyType
+    add esi, ecx
+    cmp BYTE PTR [esi], 'V'
+    jne nextClearEnemy
+    mov esi, OFFSET enemyY
+    add esi, ecx
+    mov dh, BYTE PTR [esi]
+    dec dh
+    cmp dh, 1
+    jl nextClearEnemy
+    mov esi, OFFSET enemyX
+    add esi, ecx
+    mov dl, BYTE PTR [esi]
+    call Gotoxy
+    mov al, ' '
+    call WriteChar
+    call WriteChar
+    call WriteChar
+    call WriteChar
+    call WriteChar
 nextClearEnemy:
     inc ecx
     jmp clearEnemyLoop
@@ -801,43 +866,31 @@ clearEnemies ENDP
 updateLightning PROC
     cmp currentLevelNum, 2
     jne noLightningUpdate
-    
     cmp lightningActive, 1
     je updateLightningDisplay
-    
     inc lightningTimer
     mov eax, lightningTimer
     cmp eax, lightningInterval
     jl noLightningUpdate
-    
     mov lightningTimer, 0
-    
     mov eax, 110
     call RandomRange
     add eax, 5
     mov lightningX, al
-    
     mov al, yPos
     mov lightningY, al
-    
     mov lightningActive, 1
     mov lightningDisplayTimer, 15
-    
     call drawLightningStrike
-    
     call checkLightningHit
-    
 noLightningUpdate:
     ret
-    
 updateLightningDisplay:
     dec lightningDisplayTimer
     cmp lightningDisplayTimer, 0
     jg keepLightningActive
-    
     call clearLightning
     mov lightningActive, 0
-    
 keepLightningActive:
     ret
 updateLightning ENDP
@@ -847,7 +900,6 @@ updateLightning ENDP
 drawLightningStrike PROC
     mov eax, yellow * 16 + white
     call SetTextColor
-    
     mov dh, 1
     mov dl, lightningX
 drawBoltLoop:
@@ -858,7 +910,6 @@ drawBoltLoop:
     call WriteChar
     inc dh
     jmp drawBoltLoop
-    
 drawStrikePoint:
     mov dl, lightningX
     mov dh, lightningY
@@ -867,7 +918,6 @@ drawStrikePoint:
     call SetTextColor
     mov al, 'X'
     call WriteChar
-    
     mov dl, lightningX
     sub dl, 4
     cmp dl, 0
@@ -884,7 +934,6 @@ validZapPos:
     mov edx, OFFSET lightningWarning
     call WriteString
 skipZapText:
-    
     mov eax, black * 16 + white
     call SetTextColor
     ret
@@ -895,7 +944,6 @@ drawLightningStrike ENDP
 clearLightning PROC
     mov eax, black * 16 + black
     call SetTextColor
-    
     mov dh, 1
     mov dl, lightningX
 clearBoltLoop:
@@ -906,7 +954,6 @@ clearBoltLoop:
     call WriteChar
     inc dh
     jmp clearBoltLoop
-    
 clearZapText:
     mov dl, lightningX
     sub dl, 4
@@ -929,7 +976,6 @@ validClearPos:
     call WriteChar
     call WriteChar
     call WriteChar
-    
 doneClearLightning:
     mov levelLoaded, 0
     mov eax, black * 16 + white
@@ -943,12 +989,10 @@ checkLightningHit PROC
     mov al, lightningX
     cmp al, xPos
     jne noLightningHit
-    
     mov al, lightningY
     cmp al, yPos
     jne checkBigMarioLightning
     jmp lightningHitMario
-    
 checkBigMarioLightning:
     cmp isBig, 1
     jne noLightningHit
@@ -956,16 +1000,13 @@ checkBigMarioLightning:
     dec bl
     cmp al, bl
     jne noLightningHit
-    
 lightningHitMario:
     cmp isBig, 1
     je shrinkFromLightning
     call playerDeath
     ret
-    
 shrinkFromLightning:
     mov isBig, 0
-    
 noLightningHit:
     ret
 checkLightningHit ENDP
@@ -1016,6 +1057,7 @@ setTileAt ENDP
 
 scanForEnemies PROC
     mov enemyCount, 0
+    mov bowserHealth, 3
     mov esi, OFFSET levelGrid
     mov dh, 0
     mov dl, 0
@@ -1027,6 +1069,8 @@ scanLoop:
     je foundGoomba
     cmp al, 'K'
     je foundKoopa
+    cmp al, 'V'
+    je foundBowser
     jmp continueScanning
 foundGoomba:
     movzx ecx, enemyCount
@@ -1074,6 +1118,30 @@ foundKoopa:
     inc enemyCount
     pop esi
     jmp continueScanning
+foundBowser:
+    movzx ecx, enemyCount
+    cmp ecx, MAX_ENEMIES
+    jge continueScanning
+    push esi
+    mov bowserIndex, cl
+    mov esi, OFFSET enemyX
+    add esi, ecx
+    mov BYTE PTR [esi], dl
+    mov esi, OFFSET enemyY
+    add esi, ecx
+    mov BYTE PTR [esi], dh
+    mov esi, OFFSET enemyType
+    add esi, ecx
+    mov BYTE PTR [esi], 'V'
+    mov esi, OFFSET enemyDir
+    add esi, ecx
+    mov BYTE PTR [esi], 0
+    mov esi, OFFSET enemyActive
+    add esi, ecx
+    mov BYTE PTR [esi], 1
+    inc enemyCount
+    pop esi
+    jmp continueScanning
 continueScanning:
     inc esi
     inc dl
@@ -1108,6 +1176,8 @@ updateEnemyLoop:
     mov al, BYTE PTR [esi]
     cmp al, 'H'
     je updateShell
+    cmp al, 'V'
+    je updateBowserEnemy
     mov esi, OFFSET enemyX
     add esi, ecx
     mov dl, BYTE PTR [esi]
@@ -1252,6 +1322,10 @@ checkShellHitEnemy:
     push ecx
     call shellHitCheck
     pop ecx
+    jmp skipEnemyUpdate
+updateBowserEnemy:
+    call updateBowserMovement
+    jmp skipEnemyUpdate
 skipEnemyUpdate:
     pop ecx
     inc ecx
@@ -1259,6 +1333,170 @@ skipEnemyUpdate:
 doneUpdatingEnemies:
     ret
 updateEnemies ENDP
+
+;--------------------
+
+updateBowserMovement PROC
+    cmp currentLevelNum, 2
+    jne doneBowserMovement
+    movzx ecx, bowserIndex
+    mov esi, OFFSET enemyActive
+    add esi, ecx
+    cmp BYTE PTR [esi], 0
+    je doneBowserMovement
+    mov esi, OFFSET enemyX
+    add esi, ecx
+    mov dl, BYTE PTR [esi]
+    mov esi, OFFSET enemyY
+    add esi, ecx
+    mov dh, BYTE PTR [esi]
+    push edx
+    mov al, dl
+    mov bl, xPos
+    cmp al, bl
+    jge calcBowserXDist1
+    sub bl, al
+    mov cl, bl
+    jmp calcBowserYDist
+calcBowserXDist1:
+    sub al, bl
+    mov cl, al
+calcBowserYDist:
+    pop edx
+    push edx
+    mov al, dh
+    mov bl, yPos
+    cmp al, bl
+    jge calcBowserYDist1
+    sub bl, al
+    add cl, bl
+    jmp checkBowserInRange
+calcBowserYDist1:
+    sub al, bl
+    add cl, al
+checkBowserInRange:
+    pop edx
+    cmp cl, bowserChaseRange
+    jg doneBowserMovement
+    movzx ecx, bowserIndex
+    mov esi, OFFSET enemyX
+    add esi, ecx
+    mov dl, BYTE PTR [esi]
+    cmp dl, xPos
+    je checkBowserYChase
+    jg bowserMoveLeft
+bowserMoveRight:
+    mov dl, BYTE PTR [esi]
+    inc dl
+    cmp dl, 118
+    jge checkBowserYChase
+    push ecx
+    mov esi, OFFSET enemyY
+    movzx ecx, bowserIndex
+    add esi, ecx
+    mov dh, BYTE PTR [esi]
+    pop ecx
+    push ecx
+    push edx
+    call getTileAt
+    pop edx
+    pop ecx
+    cmp al, 'F'
+    je checkBowserYChase
+    cmp al, 'P'
+    je checkBowserYChase
+    mov esi, OFFSET enemyX
+    movzx ecx, bowserIndex
+    add esi, ecx
+    mov BYTE PTR [esi], dl
+    mov esi, OFFSET enemyDir
+    add esi, ecx
+    mov BYTE PTR [esi], 1
+    jmp doneBowserMovement
+bowserMoveLeft:
+    mov dl, BYTE PTR [esi]
+    dec dl
+    cmp dl, 2
+    jle checkBowserYChase
+    push ecx
+    mov esi, OFFSET enemyY
+    movzx ecx, bowserIndex
+    add esi, ecx
+    mov dh, BYTE PTR [esi]
+    pop ecx
+    push ecx
+    push edx
+    call getTileAt
+    pop edx
+    pop ecx
+    cmp al, 'F'
+    je checkBowserYChase
+    cmp al, 'P'
+    je checkBowserYChase
+    mov esi, OFFSET enemyX
+    movzx ecx, bowserIndex
+    add esi, ecx
+    mov BYTE PTR [esi], dl
+    mov esi, OFFSET enemyDir
+    add esi, ecx
+    mov BYTE PTR [esi], 0
+    jmp doneBowserMovement
+checkBowserYChase:
+    movzx ecx, bowserIndex
+    mov esi, OFFSET enemyY
+    add esi, ecx
+    mov dh, BYTE PTR [esi]
+    cmp dh, yPos
+    je doneBowserMovement
+    jg bowserMoveUp
+bowserMoveDown:
+    mov dh, BYTE PTR [esi]
+    inc dh
+    cmp dh, 28
+    jge doneBowserMovement
+    mov esi, OFFSET enemyX
+    movzx ecx, bowserIndex
+    add esi, ecx
+    mov dl, BYTE PTR [esi]
+    push ecx
+    push edx
+    call getTileAt
+    pop edx
+    pop ecx
+    cmp al, 'F'
+    je doneBowserMovement
+    cmp al, 'P'
+    je doneBowserMovement
+    mov esi, OFFSET enemyY
+    movzx ecx, bowserIndex
+    add esi, ecx
+    mov BYTE PTR [esi], dh
+    jmp doneBowserMovement
+bowserMoveUp:
+    mov dh, BYTE PTR [esi]
+    dec dh
+    cmp dh, 2
+    jle doneBowserMovement
+    mov esi, OFFSET enemyX
+    movzx ecx, bowserIndex
+    add esi, ecx
+    mov dl, BYTE PTR [esi]
+    push ecx
+    push edx
+    call getTileAt
+    pop edx
+    pop ecx
+    cmp al, 'F'
+    je doneBowserMovement
+    cmp al, 'P'
+    je doneBowserMovement
+    mov esi, OFFSET enemyY
+    movzx ecx, bowserIndex
+    add esi, ecx
+    mov BYTE PTR [esi], dh
+doneBowserMovement:
+    ret
+updateBowserMovement ENDP
 
 ;--------------------
 
@@ -1285,10 +1523,24 @@ shellCheckLoop:
     mov al, BYTE PTR [esi]
     cmp al, dh
     jne nextShellCheck
+    mov esi, OFFSET enemyType
+    add esi, ecx
+    cmp BYTE PTR [esi], 'V'
+    je shellHitBowser
     mov esi, OFFSET enemyActive
     add esi, ecx
     mov BYTE PTR [esi], 0
     add score, 100
+    jmp nextShellCheck
+shellHitBowser:
+    dec bowserHealth
+    add score, 500
+    cmp bowserHealth, 0
+    jg nextShellCheck
+    mov esi, OFFSET enemyActive
+    add esi, ecx
+    mov BYTE PTR [esi], 0
+    add score, 2000
 nextShellCheck:
     inc ecx
     jmp shellCheckLoop
@@ -1479,6 +1731,8 @@ stompEnemy:
     mov al, BYTE PTR [esi]
     cmp al, 'K'
     je turnToShell
+    cmp al, 'V'
+    je stompBowser
     mov esi, OFFSET enemyActive
     add esi, ecx
     mov BYTE PTR [esi], 0
@@ -1492,15 +1746,84 @@ turnToShell:
     add score, 100
     mov upwardVelocity, -4
     jmp nextEnemyCheck
+stompBowser:
+    dec bowserHealth
+    add score, 500
+    mov upwardVelocity, -6
+    cmp bowserHealth, 0
+    jg pushBowserBack
+    mov esi, OFFSET enemyActive
+    add esi, ecx
+    mov BYTE PTR [esi], 0
+    add score, 2000
+    push ecx
+    mov eax, black * 16 + green
+    call SetTextColor
+    mov dl, 45
+    mov dh, 14
+    call Gotoxy
+    mov edx, OFFSET bowserDefeatedMsg
+    call WriteString
+    mov eax, 1500
+    call Delay
+    mov levelLoaded, 0
+    pop ecx
+    jmp nextEnemyCheck
+pushBowserBack:
+    mov esi, OFFSET enemyX
+    add esi, ecx
+    mov al, BYTE PTR [esi]
+    cmp al, xPos
+    jl pushBowserRight
+    sub al, 4
+    cmp al, 2
+    jg storeBowserPushLeft
+    mov al, 2
+storeBowserPushLeft:
+    mov BYTE PTR [esi], al
+    jmp nextEnemyCheck
+pushBowserRight:
+    add al, 4
+    cmp al, 117
+    jl storeBowserPushRight
+    mov al, 117
+storeBowserPushRight:
+    mov BYTE PTR [esi], al
+    jmp nextEnemyCheck
 sideHit:
     mov esi, OFFSET enemyType
     add esi, ecx
     mov al, BYTE PTR [esi]
     cmp al, 'H'
     je kickShell
+    cmp al, 'V'
+    je bowserSideHit
     cmp isBig, 1
     je shrinkMario
     call playerDeath
+    jmp nextEnemyCheck
+bowserSideHit:
+    cmp isBig, 1
+    je shrinkFromBowserHit
+    call playerDeath
+    jmp nextEnemyCheck
+shrinkFromBowserHit:
+    mov isBig, 0
+    mov esi, OFFSET enemyX
+    add esi, ecx
+    mov al, BYTE PTR [esi]
+    cmp al, xPos
+    jg pushMarioLeftFromBowser
+    add xPos, 4
+    cmp xPos, 117
+    jl nextEnemyCheck
+    mov xPos, 117
+    jmp nextEnemyCheck
+pushMarioLeftFromBowser:
+    sub xPos, 4
+    cmp xPos, 2
+    jg nextEnemyCheck
+    mov xPos, 2
     jmp nextEnemyCheck
 kickShell:
     mov esi, OFFSET enemyX
@@ -1587,9 +1910,7 @@ updatePowerups ENDP
 ;====================
 
 levelComplete PROC
-    ;Auto save progress
     call autoSaveProgress
-    
     call Clrscr
     mov eax, black * 16 + green
     call SetTextColor
@@ -1653,6 +1974,8 @@ resetForLevel2:
     mov yPos, 20
     mov lightningTimer, 0
     mov lightningActive, 0
+    mov bowserHealth, 3
+    mov bowserMoveTimer, 0
 continueReset:
     mov isBig, 0
     mov hasGravityBoots, 0
@@ -1728,6 +2051,9 @@ resetGameLevel2 PROC
     mov enemyMoveTimer, 0
     mov lightningTimer, 0
     mov lightningActive, 0
+    mov bowserHealth, 3
+    mov bowserMoveTimer, 0
+    mov bowserIndex, 0
     mov ecx, 0
 resetEnemyLoop2:
     cmp ecx, MAX_ENEMIES
@@ -1936,59 +2262,47 @@ showSaveMenu PROC
     call Gotoxy
     mov edx, OFFSET saveMenuTitle
     call WriteString
-    
     mov eax, black * 16 + white
     call SetTextColor
-    
-    ;Show current player name
     mov dl, 40
     mov dh, 10
     call Gotoxy
     mov edx, OFFSET currentPlayerMsg
     call WriteString
-    
-    ;Check if name exists
     cmp playerName, 0
     je showDefaultName
     mov edx, OFFSET playerName
     call WriteString
     jmp continueMenu
-    
 showDefaultName:
     mov edx, OFFSET defaultName
     call WriteString
-    
 continueMenu:
     mov dl, 45
     mov dh, 13
     call Gotoxy
     mov edx, OFFSET saveOption1
     call WriteString
-    
     mov dl, 45
     mov dh, 14
     call Gotoxy
     mov edx, OFFSET saveOption2
     call WriteString
-    
     mov dl, 45
     mov dh, 15
     call Gotoxy
     mov edx, OFFSET saveOption3
     call WriteString
-    
     mov dl, 45
     mov dh, 16
     call Gotoxy
     mov edx, OFFSET saveOption4
     call WriteString
-    
     mov dl, 45
     mov dh, 17
     call Gotoxy
     mov edx, OFFSET saveOption5
     call WriteString
-
 saveMenuInput:
     call ReadChar
     cmp al, '1'
@@ -2002,23 +2316,18 @@ saveMenuInput:
     cmp al, '5'
     je backFromSave
     jmp saveMenuInput
-
 doSaveGame:
     call saveGame
     jmp showSaveMenu
-    
 doLoadGame:
     call loadGame
     jmp showSaveMenu
-    
 doEnterName:
     call enterPlayerName
     jmp showSaveMenu
-    
 doViewHighScore:
     call viewHighScore
     jmp showSaveMenu
-    
 backFromSave:
     call showMainMenu
     ret
@@ -2035,33 +2344,24 @@ enterPlayerName PROC
     call Gotoxy
     mov edx, OFFSET enterNamePrompt
     call WriteString
-    
     mov eax, black * 16 + white
     call SetTextColor
-    
-    ;Read player name string
     mov edx, OFFSET playerName
     mov ecx, 20
     call ReadString
     mov playerNameLength, al
-    
-    ;Check if empty
     cmp al, 0
     jne nameEntered
-    
-    ;Copy default name if empty
     mov esi, OFFSET defaultName
     mov edi, OFFSET playerName
     mov ecx, 7
     rep movsb
-    
     mov dl, 35
     mov dh, 14
     call Gotoxy
     mov edx, OFFSET noNameMsg
     call WriteString
     jmp waitNameKey
-    
 nameEntered:
     mov eax, black * 16 + green
     call SetTextColor
@@ -2072,7 +2372,6 @@ nameEntered:
     call WriteString
     mov edx, OFFSET playerName
     call WriteString
-    
 waitNameKey:
     mov eax, black * 16 + gray
     call SetTextColor
@@ -2087,57 +2386,35 @@ enterPlayerName ENDP
 
 ;--------------------
 
-;--------------------
-
 saveGame PROC
-    ;Prepare save buffer with binary data
-    ;Format: [Name 21 bytes][Score 4 bytes][Level 1 byte][Lives 1 byte][Coins 4 bytes]
-    
-    ;Copy player name to buffer
     mov esi, OFFSET playerName
     mov edi, OFFSET saveBuffer
     mov ecx, 21
     rep movsb
-    
-    ;Copy score (4 bytes)
     mov eax, score
     mov DWORD PTR [edi], eax
     add edi, 4
-    
-    ;Copy current level (1 byte)
     mov al, currentLevelNum
     mov BYTE PTR [edi], al
     inc edi
-    
-    ;Copy lives (1 byte)
     mov al, lives
     mov BYTE PTR [edi], al
     inc edi
-    
-    ;Copy coins (4 bytes)
     mov eax, coins
     mov DWORD PTR [edi], eax
-    
-    ;Create/overwrite save file
     mov edx, OFFSET saveFileName
     call CreateOutputFile
     cmp eax, INVALID_HANDLE_VALUE
     je saveFailed
     mov saveFileHandle, eax
-    
-    ;Write buffer to file
     mov eax, saveFileHandle
     mov edx, OFFSET saveBuffer
     mov ecx, 32
     call WriteToFile
     cmp eax, 0
     je saveFailed
-    
-    ;Close file
     mov eax, saveFileHandle
     call CloseFile
-    
-    ;Show success message
     mov eax, black * 16 + green
     call SetTextColor
     mov dl, 40
@@ -2146,7 +2423,6 @@ saveGame PROC
     mov edx, OFFSET saveSuccessMsg
     call WriteString
     jmp saveWaitKey
-    
 saveFailed:
     mov eax, black * 16 + red
     call SetTextColor
@@ -2155,7 +2431,6 @@ saveFailed:
     call Gotoxy
     mov edx, OFFSET saveFailMsg
     call WriteString
-    
 saveWaitKey:
     mov eax, black * 16 + gray
     call SetTextColor
@@ -2171,55 +2446,37 @@ saveGame ENDP
 ;--------------------
 
 loadGame PROC
-    ;Open save file for reading
     mov edx, OFFSET saveFileName
     call OpenInputFile
     cmp eax, INVALID_HANDLE_VALUE
     je loadFailed
     mov saveFileHandle, eax
-    
-    ;Read buffer from file
     mov eax, saveFileHandle
     mov edx, OFFSET saveBuffer
     mov ecx, 32
     call ReadFromFile
     cmp eax, 0
     je loadFailed
-    
-    ;Close file
     mov eax, saveFileHandle
     call CloseFile
-    
-    ;Parse save buffer
-    ;Extract player name
     mov esi, OFFSET saveBuffer
     mov edi, OFFSET playerName
     mov ecx, 21
     rep movsb
-    
-    ;Extract score (4 bytes)
     mov eax, DWORD PTR [esi]
     mov score, eax
     mov savedScore, eax
     add esi, 4
-    
-    ;Extract current level (1 byte)
     mov al, BYTE PTR [esi]
     mov savedLevel, al
     inc esi
-    
-    ;Extract lives (1 byte)
     mov al, BYTE PTR [esi]
     mov lives, al
     mov savedLives, al
     inc esi
-    
-    ;Extract coins (4 bytes)
     mov eax, DWORD PTR [esi]
     mov coins, eax
     mov savedCoins, eax
-    
-    ;Show success message
     mov eax, black * 16 + green
     call SetTextColor
     mov dl, 40
@@ -2228,7 +2485,6 @@ loadGame PROC
     mov edx, OFFSET loadSuccessMsg
     call WriteString
     jmp loadWaitKey
-    
 loadFailed:
     mov eax, black * 16 + red
     call SetTextColor
@@ -2237,7 +2493,6 @@ loadFailed:
     call Gotoxy
     mov edx, OFFSET loadFailMsg
     call WriteString
-    
 loadWaitKey:
     mov eax, black * 16 + gray
     call SetTextColor
@@ -2254,25 +2509,17 @@ loadGame ENDP
 
 viewHighScore PROC
     call Clrscr
-    
-    ;Try to load save file for high score
     mov edx, OFFSET saveFileName
     call OpenInputFile
     cmp eax, INVALID_HANDLE_VALUE
     je noHighScore
     mov saveFileHandle, eax
-    
-    ;Read buffer from file
     mov eax, saveFileHandle
     mov edx, OFFSET saveBuffer
     mov ecx, 32
     call ReadFromFile
-    
-    ;Close file
     mov eax, saveFileHandle
     call CloseFile
-    
-    ;Display high score info
     mov eax, black * 16 + yellow
     call SetTextColor
     mov dl, 45
@@ -2280,14 +2527,10 @@ viewHighScore PROC
     call Gotoxy
     mov edx, OFFSET highScoreMsg
     call WriteString
-    
-    ;Get score from buffer (offset 21)
     mov esi, OFFSET saveBuffer
     add esi, 21
     mov eax, DWORD PTR [esi]
     call WriteDec
-    
-    ;Display player name
     mov eax, black * 16 + white
     call SetTextColor
     mov dl, 45
@@ -2298,7 +2541,6 @@ viewHighScore PROC
     mov edx, OFFSET saveBuffer
     call WriteString
     jmp highScoreWait
-    
 noHighScore:
     mov eax, black * 16 + red
     call SetTextColor
@@ -2307,7 +2549,6 @@ noHighScore:
     call Gotoxy
     mov edx, OFFSET loadFailMsg
     call WriteString
-    
 highScoreWait:
     mov eax, black * 16 + gray
     call SetTextColor
@@ -2323,14 +2564,10 @@ viewHighScore ENDP
 ;--------------------
 
 autoSaveProgress PROC
-    ;Check if current score is higher than saved
     mov eax, score
     cmp eax, savedScore
     jle noAutoSave
-    
-    ;Auto save if score is higher
     call saveGame
-    
 noAutoSave:
     ret
 autoSaveProgress ENDP
@@ -2339,18 +2576,13 @@ autoSaveProgress ENDP
 
 loadAndContinue PROC
     call loadGame
-    
-    ;Check if load was successful
     cmp savedLevel, 0
     je loadContinueFailed
-    
-    ;Reset game with loaded values
     cmp savedLevel, 1
     je continueLevel1
     cmp savedLevel, 2
     je continueLevel2
     jmp loadContinueFailed
-    
 continueLevel1:
     call resetGame
     mov eax, savedScore
@@ -2361,7 +2593,6 @@ continueLevel1:
     mov coins, eax
     call loadLevel1
     ret
-    
 continueLevel2:
     call resetGameLevel2
     mov eax, savedScore
@@ -2372,7 +2603,6 @@ continueLevel2:
     mov coins, eax
     call loadLevel2
     ret
-    
 loadContinueFailed:
     ret
 loadAndContinue ENDP
@@ -2385,7 +2615,7 @@ showMainMenu PROC
     call Clrscr
     call loadMenuArt
     call drawMenuArt
-    mov dl, 50
+    mov dl, 52
     mov dh, 8
     call Gotoxy
     mov edx, OFFSET menuWelcome
@@ -2593,6 +2823,9 @@ resetGame PROC
     mov enemyMoveTimer, 0
     mov lightningTimer, 0
     mov lightningActive, 0
+    mov bowserHealth, 3
+    mov bowserMoveTimer, 0
+    mov bowserIndex, 0
     mov ecx, 0
 resetEnemyLoop:
     cmp ecx, MAX_ENEMIES
