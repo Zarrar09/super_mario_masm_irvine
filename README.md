@@ -1,4 +1,4 @@
-# super_mario_masm_irvine
+# Super Mario Lightning and Gravity
 
 This project is a Mario-inspired platformer written fully in MASM using the Irvine32 library. The goal was to see how far a complete game loop, physics and interaction can be pushed using only low level assembly code.  
 I also added my own spin on the classic idea: Level 1 includes gravity boots that change how jumping feels, and Level 2 introduces a lightning mechanic that affects the player during gameplay.
