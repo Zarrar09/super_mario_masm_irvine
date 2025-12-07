@@ -10,17 +10,17 @@ I also added my own spin on the classic idea: Level 1 includes gravity boots tha
 The images below show the design of the menu and both levels.  
 The actual game runs inside the Windows console.
 
-![Level 1](images/level1.png)
+![Level 1](images/lvl1.png)
 
 
 
 
-![Level 2](images/level2.png)
+![Level 2](images/lvl2.png)
 
 
 
 
-![Menu](images/menu.png)
+![Menu](images/Menu.png)
 
 ---
 
